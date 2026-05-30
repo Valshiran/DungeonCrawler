@@ -9,17 +9,36 @@ import config
 from map_generator import MapGenerator
 from combat import CombatSystem
 
+import item_database
+
+
+
 class DungeonEngine:
     def __init__(self, root):
         self.root = root
         self.root.title("Modular Dungeon Crawler")
         
-        # 1. Initialize State Trackers
+        # Initialize State Trackers
         self.map_engine = MapGenerator()
         self.dungeon_map = self.map_engine.generate_level()
         
+        # player state and xp tracking
+        self.player_level = 1
+        self.player_xp = 0
+        self.player_xp_needed = 100
+        
         self.player_hp = 100
         self.player_max_hp = 100
+        self.player_str = 8     # Base damage power without weapons
+        self.player_def = 1     # Base natural defense reduction
+        
+        # The Knight's loadout tracking strings
+        self.equipped_weapon = "iron_axe"
+        self.equipped_armor = "leather_rags"
+
+        self.inventory = ["minor_potion", "minor_potion", "spiked_mace"]
+        
+     
         
         # 2. Setup Primary Canvas Layout
         self.canvas = tk.Canvas(
@@ -103,7 +122,12 @@ class DungeonEngine:
         self.root.unbind("<Right>")
         
         # Initialize combat module processing
-        self.active_battle = CombatSystem(self.player_hp, enemy_type)
+        self.active_battle = CombatSystem(
+            self.player_hp, 
+            self.player_str, 
+            self.equipped_weapon, 
+            enemy_type
+        )
         self.enemy_idx_to_remove = enemy_index
         
         # Create a popup overlay window
@@ -158,10 +182,21 @@ class DungeonEngine:
             messagebox.showinfo("Victory!", f"You defeated the {self.active_battle.enemy_type}!")
             self.close_combat(victory=True)
             return
-            
+        
+        # lookup defense data from item database
+        armor_data = item_database.ARMOR.get(self.equipped_armor)
+        armor_bonus = armor_data.get("defense_bonus", 0) if armor_data else 0
+        total_defense = self.player_def + armor_bonus
+        
         # Enemy Turn calculation
         raw_damage = self.active_battle.enemy_attack
-        actual_damage = max(1, raw_damage // 2) if defending else raw_damage
+        # If player chose to defend, cut raw attack power in half first
+        if defending:
+            raw_damage = max(1, raw_damage // 2)
+            
+        # Subtract defense value from incoming damage (ensure they take at least 1 damage)
+        actual_damage = max(1, raw_damage - total_defense)
+        
         self.active_battle.player_hp -= actual_damage
         self.player_hp = self.active_battle.player_hp # Sync engine HP
         
