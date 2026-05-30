@@ -1,116 +1,255 @@
 import os
+import random
 import tkinter as tk
 from tkinter import messagebox
 from PIL import Image, ImageTk
 
-# 1. Game Constants
-GRID_SIZE = 10          # A 10x10 grid layout
-TILE_SIZE = 50          # Each square grid tile is 50x50 pixels
-WINDOW_WIDTH = GRID_SIZE * TILE_SIZE
-WINDOW_HEIGHT = GRID_SIZE * TILE_SIZE
+# Import your custom engine modules
+import config
+from map_generator import MapGenerator
+from combat import CombatSystem
 
-class DungeonGame:
+class DungeonEngine:
     def __init__(self, root):
         self.root = root
-        self.root.title("Mega Man Dungeon Crawler")
+        self.root.title("Modular Dungeon Crawler")
         
-        # 2. Player and Target Positions (Grid Coordinates: 0 to 9)
-        self.player_x = 0
-        self.player_y = 0
+        # 1. Initialize State Trackers
+        self.map_engine = MapGenerator()
+        self.dungeon_map = self.map_engine.generate_level()
         
-        self.target_x = 9
-        self.target_y = 9
+        self.player_hp = 100
+        self.player_max_hp = 100
         
-        # 3. Setup the Game Canvas
-        self.canvas = tk.Canvas(root, width=WINDOW_WIDTH, height=WINDOW_HEIGHT, bg="#111111")
+        # 2. Setup Primary Canvas Layout
+        self.canvas = tk.Canvas(
+            root, 
+            width=config.WINDOW_WIDTH, 
+            height=config.WINDOW_HEIGHT + 40, # Extra space at bottom for UI HUD
+            bg="#111111"
+        )
         self.canvas.pack()
         
-        # 4. Load Sprites using Pillow
+        # 3. Load Assets & Spawn
         self.load_sprites()
-        
-        # 5. Draw the initial game board
+        self.spawn_entities()
         self.render_game()
         
-        # 6. Keyboard Binding: Listen for Arrow Key presses
-        self.root.bind("<Up>", self.move_up)
-        self.root.bind("<Down>", self.move_down)
-        self.root.bind("<Left>", self.move_left)
-        self.root.bind("<Right>", self.move_right)
+        # 4. Keyboard Input Binding
+        self.root.bind("<Up>", lambda e: self.move_player(0, -1))
+        self.root.bind("<Down>", lambda e: self.move_player(0, 1))
+        self.root.bind("<Left>", lambda e: self.move_player(-1, 0))
+        self.root.bind("<Right>", lambda e: self.move_player(1, 0))
 
     def load_sprites(self):
-        # Paths to your existing Mega Man assets
-        assets_folder = os.path.join("assets", "fantasy")
+        assets_folder = "assets"
+        ts = config.TILE_SIZE
         
-        # Load and resize Player
-        player_path = os.path.join(assets_folder, "megaman.png")
-        pil_player = Image.open(player_path).resize((TILE_SIZE, TILE_SIZE))
-        self.player_sprite = ImageTk.PhotoImage(pil_player)
+        # Characters
+        self.player_sprite = ImageTk.PhotoImage(Image.open(os.path.join(assets_folder, "knight.png")).resize((ts, ts)))
+        self.ogre_sprite = ImageTk.PhotoImage(Image.open(os.path.join(assets_folder, "ogre.png")).resize((ts, ts)))
+        self.goblin_sprite = ImageTk.PhotoImage(Image.open(os.path.join(assets_folder, "goblin.png")).resize((ts, ts)))
         
-        # Load and resize Target Boss
-        target_path = os.path.join(assets_folder, "gemini.png")
-        pil_target = Image.open(target_path).resize((TILE_SIZE, TILE_SIZE))
-        self.target_sprite = ImageTk.PhotoImage(pil_target)
+        #Environment Tiles
+        self.wall_tile = ImageTk.PhotoImage(Image.open(os.path.join(assets_folder, "rock_tile.png")).resize((ts, ts)))
+        self.floor_tile = ImageTk.PhotoImage(Image.open(os.path.join(assets_folder, "dirt_tile.png")).resize((ts, ts)))
 
-    def render_game(self):
-        # Clear the whiteboard before redrawing
-        self.canvas.delete("all")
+    def spawn_entities(self):
+        self.player_x = 0
+        self.player_y = 0
+        self.ogre_x = config.GRID_SIZE - 1
+        self.ogre_y = config.GRID_SIZE - 1
         
-        # Draw a subtle grid map background
-        for row in range(GRID_SIZE):
-            for col in range(GRID_SIZE):
-                x1 = col * TILE_SIZE
-                y1 = row * TILE_SIZE
-                x2 = x1 + TILE_SIZE
-                y2 = y1 + TILE_SIZE
-                # Draw grid square outlines
-                self.canvas.create_rectangle(x1, y1, x2, y2, outline="#222222")
+        # Spawn 3 Goblins randomly on open floor tiles
+        self.goblins = []
+        while len(self.goblins) < 3:
+            gx = random.randint(0, config.GRID_SIZE - 1)
+            gy = random.randint(0, config.GRID_SIZE - 1)
+            if self.dungeon_map[gy][gx] == config.FLOOR and (gx, gy) != (0,0) and (gx, gy) != (self.ogre_x, self.ogre_y):
+                if (gx, gy) not in self.goblins:
+                    self.goblins.append([gx, gy])
+
+    def move_player(self, dx, dy):
+        new_x = self.player_x + dx
+        new_y = self.player_y + dy
         
-        # Draw Target Boss (Gemini Man) at its pixel location
-        target_pixel_x = self.target_x * TILE_SIZE
-        target_pixel_y = self.target_y * TILE_SIZE
-        self.canvas.create_image(target_pixel_x, target_pixel_y, anchor="nw", image=self.target_sprite)
-        
-        # Draw Player (Mega Man) at his pixel location
-        player_pixel_x = self.player_x * TILE_SIZE
-        player_pixel_y = self.player_y * TILE_SIZE
-        self.canvas.create_image(player_pixel_x, player_pixel_y, anchor="nw", image=self.player_sprite)
+        if 0 <= new_x < config.GRID_SIZE and 0 <= new_y < config.GRID_SIZE:
+            if self.dungeon_map[new_y][new_x] == config.FLOOR:
+                self.player_x = new_x
+                self.player_y = new_y
+                self.check_game_events()
 
-    # 7. Movement Controls & Boundary Guards
-    def move_up(self, event):
-        if self.player_y > 0:  # Prevents moving off the top edge
-            self.player_y -= 1
-            self.check_game_state()
-
-    def move_down(self, event):
-        if self.player_y < GRID_SIZE - 1:  # Prevents moving off the bottom edge
-            self.player_y += 1
-            self.check_game_state()
-
-    def move_left(self, event):
-        if self.player_x > 0:  # Prevents moving off the left edge
-            self.player_x -= 1
-            self.check_game_state()
-
-    def move_right(self, event):
-        if self.player_x < GRID_SIZE - 1:  # Prevents moving off the right edge
-            self.player_x += 1
-            self.check_game_state()
-
-    # 8. Collision Detection Logic
-    def check_game_state(self):
-        # Redraw player at their new position
+    def check_game_events(self):
         self.render_game()
         
-        # If player coordinates match the target coordinates, victory!
-        if self.player_x == self.target_x and self.player_y == self.target_y:
-            messagebox.showinfo("Victory!", "⚡ Boss Defeated! You navigated the dungeon safely!")
-            # Reset player to start
-            self.player_x = 0
-            self.player_y = 0
-            self.render_game()
+        # Check Goblin Collision
+        for i, goblin in enumerate(self.goblins):
+            if [self.player_x, self.player_y] == goblin:
+                self.start_combat("goblin", i)
+                return
+                
+        # Check Ogre Boss Collision
+        if self.player_x == self.ogre_x and self.player_y == self.ogre_y:
+            self.start_combat("ogre", -1)
 
-# Main Application Loop
+    # -------------------------------------------------------------------------
+    # TURN-BASED COMBAT WINDOW MANAGEMENT
+    # -------------------------------------------------------------------------
+    def start_combat(self, enemy_type, enemy_index):
+        # Unbind movement keys so player can't walk away mid-fight
+        self.root.unbind("<Up>")
+        self.root.unbind("<Down>")
+        self.root.unbind("<Left>")
+        self.root.unbind("<Right>")
+        
+        # Initialize combat module processing
+        self.active_battle = CombatSystem(self.player_hp, enemy_type)
+        self.enemy_idx_to_remove = enemy_index
+        
+        # Create a popup overlay window
+        self.battle_win = tk.Toplevel(self.root)
+        self.battle_win.title(f"Battle - Vs {enemy_type.capitalize()}!")
+        self.battle_win.geometry("400x300")
+        self.battle_win.grab_set() # Locks focus strictly to combat window
+        
+        # Combat UI Text Fields
+        self.status_lbl = tk.Label(self.battle_win, text=f"A wild {enemy_type} stands before you!", font=("Arial", 12, "bold"), pady=10)
+        self.status_lbl.pack()
+        
+        self.hp_lbl = tk.Label(self.battle_win, text=f"Your HP: {self.active_battle.player_hp}  |  Enemy HP: {self.active_battle.enemy_hp}", font=("Arial", 11))
+        self.hp_lbl.pack(pady=10)
+        
+        self.log_lbl = tk.Label(self.battle_win, text="What will you do?", font=("Arial", 10), fg="blue", wraplength=350)
+        self.log_lbl.pack(pady=15)
+        
+        # Action Buttons Layout
+        btn_frame = tk.Frame(self.battle_win)
+        btn_frame.pack(side="bottom", pady=20)
+        
+        tk.Button(btn_frame, text="Attack ⚔️", width=10, command=self.exec_attack).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Defend 🛡️", width=10, command=self.exec_defend).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Run 🏃", width=10, command=self.exec_run).pack(side="left", padx=5)
+
+    def exec_attack(self):
+        log_msg = self.active_battle.player_attack()
+        self.process_enemy_turn(log_msg, defending=False)
+
+    def exec_defend(self):
+        log_msg = self.active_battle.player_defend()
+        self.process_enemy_turn(log_msg, defending=True)
+
+    def exec_run(self):
+        success = self.active_battle.try_run()
+        if success:
+            messagebox.showinfo("Escaped!", "You successfully scrambled backward to safety!")
+            # Move player back slightly so they aren't on the enemy tile
+            self.player_x = max(0, self.player_x - 1)
+            self.close_combat(victory=False)
+        else:
+            log_msg = "You tried to run, but the path was blocked!"
+            self.process_enemy_turn(log_msg, defending=False)
+
+    def process_enemy_turn(self, initial_msg, defending):
+        # Update HP display after player move
+        self.hp_lbl.config(text=f"Your HP: {self.active_battle.player_hp}  |  Enemy HP: {self.active_battle.enemy_hp}")
+        
+        # Check Win Condition
+        if self.active_battle.enemy_hp <= 0:
+            messagebox.showinfo("Victory!", f"You defeated the {self.active_battle.enemy_type}!")
+            self.close_combat(victory=True)
+            return
+            
+        # Enemy Turn calculation
+        raw_damage = self.active_battle.enemy_attack
+        actual_damage = max(1, raw_damage // 2) if defending else raw_damage
+        self.active_battle.player_hp -= actual_damage
+        self.player_hp = self.active_battle.player_hp # Sync engine HP
+        
+        # Display turn outcome log
+        enemy_msg = f"\nThe {self.active_battle.enemy_type} strikes back dealing {actual_damage} damage!"
+        self.log_lbl.config(text=initial_msg + enemy_msg)
+        self.hp_lbl.config(text=f"Your HP: {self.active_battle.player_hp}  |  Enemy HP: {self.active_battle.enemy_hp}")
+        
+        # Check Loss Condition
+        if self.player_hp <= 0:
+            messagebox.showerror("Defeat", "Your health dropped to 0. You fell in battle!")
+            self.battle_win.destroy()
+            self.game_over()
+
+    def close_combat(self, victory):
+        if victory:
+            if self.enemy_idx_to_remove == -1: # Ogre Boss defeated
+                # Advance map generator to next level floor layout
+                messagebox.showinfo("Floor Cleared", "Descending deeper into the dungeon layout...")
+                self.dungeon_map = self.map_engine.next_level()
+                self.spawn_entities()
+            else:
+                # Remove defeated minor goblin from current map instance
+                self.goblins.pop(self.enemy_idx_to_remove)
+                
+        self.battle_win.destroy()
+        self.render_game()
+        
+        # Re-bind movement controls for main window navigation
+        self.root.bind("<Up>", lambda e: self.move_player(0, -1))
+        self.root.bind("<Down>", lambda e: self.move_player(0, 1))
+        self.root.bind("<Left>", lambda e: self.move_player(-1, 0))
+        self.root.bind("<Right>", lambda e: self.move_player(1, 0))
+
+    def game_over(self):
+        self.map_engine = MapGenerator() # Reset floor counter back to level 1
+        self.dungeon_map = self.map_engine.generate_level()
+        self.player_hp = 100
+        self.spawn_entities()
+        self.render_game()
+        
+        # Reset standard keys
+        self.root.bind("<Up>", lambda e: self.move_player(0, -1))
+        self.root.bind("<Down>", lambda e: self.move_player(0, 1))
+        self.root.bind("<Left>", lambda e: self.move_player(-1, 0))
+        self.root.bind("<Right>", lambda e: self.move_player(1, 0))
+
+    # -------------------------------------------------------------------------
+    # RENDERING ENGINE
+    # -------------------------------------------------------------------------
+    def render_game(self):
+        self.canvas.delete("all")
+        ts = config.TILE_SIZE
+        
+        # Render Environment Blocks
+        for row in range(config.GRID_SIZE):
+            for col in range(config.GRID_SIZE):
+                x1, y1 = col * ts, row * ts
+                x2, y2 = x1 + ts, y1 + ts
+                
+                # Check tile type and stamp down the correct graphic asset
+                if self.dungeon_map[row][col] == config.WALL:
+                    self.canvas.create_image(x, y, anchor="nw", image=self.wall_tile)
+                else:
+                    self.canvas.create_image(x, y, anchor="nw", image=self.floor_tile)
+
+        # Proximity Check / Visibility Render
+        ogre_dist = max(abs(self.player_x - self.ogre_x), abs(self.player_y - self.ogre_y))
+        if ogre_dist <= 2:
+            self.canvas.create_image(self.ogre_x * ts, self.ogre_y * ts, anchor="nw", image=self.ogre_sprite)
+            
+        for gx, gy in self.goblins:
+            gob_dist = max(abs(self.player_x - gx), abs(self.player_y - gy))
+            if gob_dist <= 2:
+                self.canvas.create_image(gx * ts, gy * ts, anchor="nw", image=self.goblin_sprite)
+
+        # Player Rendering
+        self.canvas.create_image(self.player_x * ts, self.player_y * ts, anchor="nw", image=self.player_sprite)
+        
+        # HUD Information Bar at the bottom
+        hud_y = (config.GRID_SIZE * ts) + 15
+        self.canvas.create_text(
+            15, hud_y, 
+            text=f"Knight HP: {self.player_hp}/{self.player_max_hp}  |  Dungeon Floor: B{self.map_engine.current_level}", 
+            fill="white", anchor="w", font=("Arial", 12, "bold")
+        )
+
 if __name__ == "__main__":
     window = tk.Tk()
-    game = DungeonGame(window)
+    game = DungeonEngine(window)
     window.mainloop()
