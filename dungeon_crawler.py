@@ -224,9 +224,9 @@ class DungeonEngine:
                 
                 # Check tile type and stamp down the correct graphic asset
                 if self.dungeon_map[row][col] == config.WALL:
-                    self.canvas.create_image(x, y, anchor="nw", image=self.wall_tile)
+                    self.canvas.create_image(x1, y1, anchor="nw", image=self.wall_tile)
                 else:
-                    self.canvas.create_image(x, y, anchor="nw", image=self.floor_tile)
+                    self.canvas.create_image(x1, y1, anchor="nw", image=self.floor_tile)
 
         # Proximity Check / Visibility Render
         ogre_dist = max(abs(self.player_x - self.ogre_x), abs(self.player_y - self.ogre_y))

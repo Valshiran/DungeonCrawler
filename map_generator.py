@@ -12,15 +12,22 @@ class MapGenerator:
             map_row = [WALL if random.random() < 0.45 else FLOOR for _ in range(GRID_SIZE)]
             dungeon_map.append(map_row)
             
-        # 2. Run 2 "Smoothing Passes" to simulate natural cave formation
+        # 2. Run the 2 smoothing passes to get organic cave curves
         for _ in range(2):
             dungeon_map = self.smooth_map(dungeon_map)
 
-        # 3. Open up safe paths at the start and finish points
-        for r in range(2):
-            for c in range(2):
+        # ---------------------------------------------------------------------
+        # FIXED: Carve out guaranteed open pathways AFTER the map is smoothed
+        # ---------------------------------------------------------------------
+        # Top-Left Starting Area (3x3 open runway for the Knight)
+        for r in range(3):
+            for c in range(3):
                 dungeon_map[r][c] = FLOOR
-                dungeon_map[GRID_SIZE-1-r][GRID_SIZE-1-c] = FLOOR
+                
+        # Bottom-Right Boss Area (3x3 open runway for the Troll)
+        for r in range(1, 4):
+            for c in range(1, 4):
+                dungeon_map[GRID_SIZE - r][GRID_SIZE - c] = FLOOR
                 
         return dungeon_map
 
@@ -30,20 +37,17 @@ class MapGenerator:
         
         for row in range(GRID_SIZE):
             for col in range(GRID_SIZE):
-                # Count how many of the 8 surrounding tiles are solid walls
                 wall_count = 0
                 for r_offset in [-1, 0, 1]:
                     for c_offset in [-1, 0, 1]:
                         neighbor_r = row + r_offset
                         neighbor_c = col + c_offset
                         
-                        # Treat map borders as solid walls
                         if not (0 <= neighbor_r < GRID_SIZE and 0 <= neighbor_c < GRID_SIZE):
                             wall_count += 1
                         elif old_map[neighbor_r][neighbor_c] == WALL:
                             wall_count += 1
                 
-                # Cave Rule: If surrounded by 5 or more walls, it becomes a solid cave wall
                 if wall_count >= 5:
                     new_map[row][col] = WALL
                 else:
