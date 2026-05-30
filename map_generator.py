@@ -16,9 +16,7 @@ class MapGenerator:
         for _ in range(2):
             dungeon_map = self.smooth_map(dungeon_map)
 
-        # ---------------------------------------------------------------------
-        # FIXED: Carve out guaranteed open pathways AFTER the map is smoothed
-        # ---------------------------------------------------------------------
+        # Carve out guaranteed open pathways AFTER the map is smoothed
         # Top-Left Starting Area (3x3 open runway for the Knight)
         for r in range(3):
             for c in range(3):
@@ -28,6 +26,10 @@ class MapGenerator:
         for r in range(1, 4):
             for c in range(1, 4):
                 dungeon_map[GRID_SIZE - r][GRID_SIZE - c] = FLOOR
+        
+        # verify path exists between start and end, if not drill a tunnel through the walls
+        if not self.is_path_clear(dungeon_map):
+            dungeon_map = self.drill_emergency_tunnel(dungeon_map)
                 
         return dungeon_map
 
@@ -54,6 +56,54 @@ class MapGenerator:
                     new_map[row][col] = FLOOR
                     
         return new_map
+    
+    def is_path_clear(self, test_map):
+        
+        start = (0, 0)
+        target = (GRID_SIZE - 1, GRID_SIZE - 1)
+        
+        # track tiles already checked
+        visited = set()
+        queue = [start]
+        visited.add(start)
+        
+        while queue:
+            current_col, current_row = queue.pop(0)
+            
+            if (current_col, current_row) == target:
+                return True
+            
+            for dc, dr in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                next_col = current_col + dc
+                next_row = current_row + dr
+                
+                if (0 <= next_col < GRID_SIZE and 0 <= next_row < GRID_SIZE):
+                    if test_map[next_row][next_col] == FLOOR and (next_col, next_row) not in visited:
+                        visited.add((next_col, next_row))
+                        queue.append((next_col, next_row))
+        return False
+    
+    def drill_emergency_tunnel (self, broken_map):
+        
+        cx, cy = 0, 0
+        target = GRID_SIZE - 1
+        
+        # carve a tunnel step-by-step, destroying walls
+        while cx < target and cy < target:
+            
+            # randomly choose to step right or down on the way to exit (the pathing)
+            if cx < target and cy < target:
+                if random.random() < 0.5:
+                    cx += 1
+                else:
+                    cy += 1
+            elif cx < target:
+                cx += 1
+            else:
+                cy += 1
+            
+            # removes the stone and puts a floor tile    
+            broken_map[cy][cx] = FLOOR
 
     def next_level(self):
         self.current_level += 1

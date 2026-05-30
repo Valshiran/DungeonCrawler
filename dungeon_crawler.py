@@ -280,7 +280,8 @@ class DungeonEngine:
         hud_y = (config.GRID_SIZE * ts) + 15
         self.canvas.create_text(
             15, hud_y, 
-            text=f"Knight HP: {self.player_hp}/{self.player_max_hp}  |  Dungeon Floor: B{self.map_engine.current_level}", 
+            text=f"Knight HP: {self.player_hp}/{self.player_max_hp}  |  Dungeon Floor: B{self.map_engine.current_level}   | XP: {self.player_xp}/{self.player_xp_needed}",  
+            # Equipped: {item_database.WEAPONS[self.equipped_weapon]['name']} & {item_database.ARMOR[self.equipped_armor]['name']}", 
             fill="white", anchor="w", font=("Arial", 12, "bold")
         )
 
