@@ -10,6 +10,7 @@ from map_generator import MapGenerator
 from combat import CombatSystem
 
 import item_database
+import creature_database
 
 
 
@@ -76,17 +77,35 @@ class DungeonEngine:
     def spawn_entities(self):
         self.player_x = 0
         self.player_y = 0
-        self.ogre_x = config.GRID_SIZE - 1
-        self.ogre_y = config.GRID_SIZE - 1
         
-        # Spawn 3 Goblins randomly on open floor tiles
-        self.goblins = []
-        while len(self.goblins) < 3:
+        # 1. Standard generic boss positioning tracking
+        self.boss_x = config.GRID_SIZE - 1
+        self.boss_y = config.GRID_SIZE - 1
+        
+        # 2. Initialize the container dictionary cleanly
+        self.active_creatures = {}
+        
+        # 3. Pull a randomized boss key from the dedicated BOSSES dictionary catalog
+        available_bosses = list(creature_database.BOSSES.keys())
+        random_boss = random.choice(available_bosses)
+        
+        # Seat the boss at the exit coordinates
+        self.active_creatures[(self.boss_x, self.boss_y)] = random_boss
+        
+        # 4. FIXED: Clean extraction of minions directly from the separate database
+        available_creatures = list(creature_database.CREATURES.keys())
+        
+        # 5. FIXED: Adjusted target threshold size to 5 (1 boss + 4 unique minions)
+        while len(self.active_creatures) < 5:
             gx = random.randint(0, config.GRID_SIZE - 1)
             gy = random.randint(0, config.GRID_SIZE - 1)
-            if self.dungeon_map[gy][gx] == config.FLOOR and (gx, gy) != (0,0) and (gx, gy) != (self.ogre_x, self.ogre_y):
-                if (gx, gy) not in self.goblins:
-                    self.goblins.append([gx, gy])
+            
+            # FIXED: Updated the exclusion check to utilize self.boss_x / self.boss_y
+            if self.dungeon_map[gy][gx] == config.FLOOR and (gx, gy) != (0,0) and (gx, gy) != (self.boss_x, self.boss_y):
+                if (gx, gy) not in self.active_creatures:
+                    # Randomly pick a creature type (e.g., "goblin" or "orc")
+                    random_creature = random.choice(available_creatures)
+                    self.active_creatures[(gx, gy)] = random_creature
 
     def move_player(self, dx, dy):
         new_x = self.player_x + dx
@@ -100,21 +119,27 @@ class DungeonEngine:
 
     def check_game_events(self):
         self.render_game()
+        current_pos = (self.player_x, self.player_y)
         
-        # Check Goblin Collision
-        for i, goblin in enumerate(self.goblins):
-            if [self.player_x, self.player_y] == goblin:
-                self.start_combat("goblin", i)
-                return
+        # 1. DYNAMIC CHECK: Is there any creature from the database sitting on this tile?
+        if current_pos in self.active_creatures:
+            self.current_enemy_coords = current_pos
+            creature_type = self.active_creatures[current_pos]
+            
+            # Launch combat using the exact string key pulled from the map dictionary
+            self.start_combat(creature_type)
+            return
                 
-        # Check Ogre Boss Collision
-        if self.player_x == self.ogre_x and self.player_y == self.ogre_y:
-            self.start_combat("ogre", -1)
+        # 2. Check Boss Collision
+        if current_pos == (self.boss_x, self.boss_y):
+            self.current_enemy_coords = None
+            creature_type = self.active_creatures[current_pos]
+            self.start_combat(creature_type)
 
     # -------------------------------------------------------------------------
     # TURN-BASED COMBAT WINDOW MANAGEMENT
     # -------------------------------------------------------------------------
-    def start_combat(self, enemy_type, enemy_index):
+    def start_combat(self, enemy_type):
         # Unbind movement keys so player can't walk away mid-fight
         self.root.unbind("<Up>")
         self.root.unbind("<Down>")
@@ -128,7 +153,6 @@ class DungeonEngine:
             self.equipped_weapon, 
             enemy_type
         )
-        self.enemy_idx_to_remove = enemy_index
         
         # Create a popup overlay window
         self.battle_win = tk.Toplevel(self.root)
@@ -210,22 +234,71 @@ class DungeonEngine:
             messagebox.showerror("Defeat", "Your health dropped to 0. You fell in battle!")
             self.battle_win.destroy()
             self.game_over()
+    
+    def check_level_up(self):
+        """Checks if the player has passed the XP threshold and scales requirements dynamically."""
+        leveled_up = False
+        
+        # A while loop handles multiple level ups if they get a massive XP drop!
+        while self.player_xp >= self.player_xp_needed:
+            self.player_xp -= self.player_xp_needed  # Deduct the spent XP
+            self.player_level += 1
+            leveled_up = True
+            
+            # --- THE FORMULA ---
+            # Multiply the previous requirement by 1.2 (and turn it into an integer)
+            self.player_xp_needed = int(self.player_xp_needed * 1.2)
+            
+            # Permanently boost core player base stats!
+            self.player_max_hp += 15
+            self.player_hp = self.player_max_hp  # Fully heal on level up
+            self.player_str += 3
+            self.player_def += 1
+            
+            messagebox.showinfo(
+                "LEVEL UP! ✨", 
+                f"Congratulations! You reached Level {self.player_level}!\n\n"
+                f"Max HP increased to {self.player_max_hp}\n"
+                f"Base Strength increased to {self.player_str}\n"
+                f"Base Defense increased to {self.player_def}\n"
+                f"Next Level requires: {self.player_xp_needed} XP"
+            )
+            
+        # Refresh the main window interface if a level up occurred
+        if leveled_up:
+            self.render_game()
 
     def close_combat(self, victory):
         if victory:
-            if self.enemy_idx_to_remove == -1: # Ogre Boss defeated
-                # Advance map generator to next level floor layout
-                messagebox.showinfo("Floor Cleared", "Descending deeper into the dungeon layout...")
+            
+            xp_gained = self.active_battle.xp_reward
+            self.player_xp += xp_gained
+            
+            # --- FIXED: Check if the enemy type exists anywhere inside the BOSS database ---
+            if self.active_battle.enemy_type in creature_database.BOSSES:
+                # Grab the real display name of the boss for the message box
+                boss_name = creature_database.BOSSES[self.active_battle.enemy_type]["name"]
+                
+                messagebox.showinfo(
+                    "Floor Cleared!", 
+                    f"You have vanquished the legendary {boss_name}!\n"
+                    f"Gained {xp_gained} XP.\n\n"
+                    f"Descending deeper into the cavern layout..."
+                )
                 self.dungeon_map = self.map_engine.next_level()
                 self.spawn_entities()
             else:
-                # Remove defeated minor goblin from current map instance
-                self.goblins.pop(self.enemy_idx_to_remove)
+                # Remove defeated minor monster from the map dictionary using its coordinates
+                if self.current_enemy_coords in self.active_creatures:
+                    self.active_creatures.pop(self.current_enemy_coords)
+            
+            if hasattr(self, 'check_level_up'):
+                self.check_level_up()
                 
         self.battle_win.destroy()
         self.render_game()
         
-        # Re-bind movement controls for main window navigation
+        # Re-bind movement controls
         self.root.bind("<Up>", lambda e: self.move_player(0, -1))
         self.root.bind("<Down>", lambda e: self.move_player(0, 1))
         self.root.bind("<Left>", lambda e: self.move_player(-1, 0))
@@ -263,15 +336,21 @@ class DungeonEngine:
                 else:
                     self.canvas.create_image(x1, y1, anchor="nw", image=self.floor_tile)
 
-        # Proximity Check / Visibility Render
-        ogre_dist = max(abs(self.player_x - self.ogre_x), abs(self.player_y - self.ogre_y))
-        if ogre_dist <= 2:
-            self.canvas.create_image(self.ogre_x * ts, self.ogre_y * ts, anchor="nw", image=self.ogre_sprite)
+       # --- FIXED: DYNAMIC PROXIMITY CHECK / VISIBILITY RENDER ---
+        # Loops through every monster currently active on the map dictionary
+        for (mx, my), creature_type in self.active_creatures.items():
+            # Calculate distance from player to this specific monster
+            dist = max(abs(self.player_x - mx), abs(self.player_y - my))
             
-        for gx, gy in self.goblins:
-            gob_dist = max(abs(self.player_x - gx), abs(self.player_y - gy))
-            if gob_dist <= 2:
-                self.canvas.create_image(gx * ts, gy * ts, anchor="nw", image=self.goblin_sprite)
+            # Proximity fog-of-war check (only show if within 2 tiles)
+            if dist <= 2:
+                # Dynamically find the matching sprite (e.g., self.orc_sprite, self.troll_sprite)
+                # Falls back to self.goblin_sprite if a specific asset isn't found
+                sprite_attr_name = f"{creature_type}_sprite"
+                creature_sprite = getattr(self, sprite_attr_name, self.goblin_sprite)
+                
+                # Render the creature onto the canvas
+                self.canvas.create_image(mx * ts, my * ts, anchor="nw", image=creature_sprite)
 
         # Player Rendering
         self.canvas.create_image(self.player_x * ts, self.player_y * ts, anchor="nw", image=self.player_sprite)

@@ -1,5 +1,6 @@
 import random
 import item_database
+import creature_database
 
 class CombatSystem:
     # 1. FIXED: Pass player's base stats and gear directly into the battle tracker
@@ -9,13 +10,18 @@ class CombatSystem:
         self.equipped_weapon_id = equipped_weapon_id
         self.enemy_type = enemy_type
         
-        # Scale enemy HP based on what you ran into
-        if enemy_type == "troll":
-            self.enemy_hp = 50
-            self.enemy_attack = 10
-        else: # goblin
-            self.enemy_hp = 15
-            self.enemy_attack = 4
+        creature_data = creature_database.CREATURES.get(enemy_type, {})
+        if not creature_data:
+            creature_data = creature_database.BOSSES.get(enemy_type)
+        
+        if creature_data:
+            self.enemy_hp = creature_data["hp"]
+            self.enemy_attack = creature_data["attack"]
+            self.xp_reward = creature_data["xp_reward"]
+        else:
+            self.enemy_hp = 10
+            self.enemy_attack = 2
+            self.xp_reward = 10
             
     # 2. Added 'self' so it is a proper class method
     def calculate_player_attack_damage(self):

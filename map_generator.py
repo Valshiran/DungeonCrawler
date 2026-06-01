@@ -89,7 +89,7 @@ class MapGenerator:
         target = GRID_SIZE - 1
         
         # carve a tunnel step-by-step, destroying walls
-        while cx < target and cy < target:
+        while cx < target or cy < target:
             
             # randomly choose to step right or down on the way to exit (the pathing)
             if cx < target and cy < target:
@@ -104,6 +104,8 @@ class MapGenerator:
             
             # removes the stone and puts a floor tile    
             broken_map[cy][cx] = FLOOR
+            
+        return broken_map
 
     def next_level(self):
         self.current_level += 1
