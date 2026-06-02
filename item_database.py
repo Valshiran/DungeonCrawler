@@ -110,6 +110,21 @@ WEAPONS = {
 
 }
 
+SHIELDS = {
+    "wooden_shield": {
+        "name": "Wooden Shield",
+        "type": "shield",
+        "defense_bonus": 2,
+        "description": "A basic wooden shield that offers minimal protection."
+    },
+    "iron_shield": {
+        "name": "Iron Shield",
+        "type": "shield",
+        "defense_bonus": 4,
+        "description": "A sturdy iron shield that provides good protection against attacks."
+    }
+}
+
 ARMOR = {
     "leather_rags": {
         "name": "Leather Rags",

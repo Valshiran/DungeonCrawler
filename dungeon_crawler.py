@@ -11,6 +11,7 @@ from combat import CombatSystem
 
 import item_database
 import creature_database
+import inventory_ui
 
 
 
@@ -34,10 +35,13 @@ class DungeonEngine:
         self.player_def = 1     # Base natural defense reduction
         
         # The Knight's loadout tracking strings
-        self.equipped_weapon = "iron_axe"
-        self.equipped_armor = "leather_rags"
+        self.equipped = {
+            "weapon": "rusty_sword",  
+            "armor": "none",
+            "shield": "none"
+        }
 
-        self.inventory = ["minor_potion", "minor_potion", "spiked_mace"]
+        self.inventory = ["minor_potion", "minor_potion", "spiked_club"]
         
      
         
@@ -56,10 +60,15 @@ class DungeonEngine:
         self.render_game()
         
         # 4. Keyboard Input Binding
+        # movement
         self.root.bind("<Up>", lambda e: self.move_player(0, -1))
         self.root.bind("<Down>", lambda e: self.move_player(0, 1))
         self.root.bind("<Left>", lambda e: self.move_player(-1, 0))
         self.root.bind("<Right>", lambda e: self.move_player(1, 0))
+        
+        # open inventory
+        self.root.bind("<i>", lambda e: inventory_ui.InventoryWindow(self.root, self))
+        self.root.bind("<I>", lambda e: inventory_ui.InventoryWindow(self.root, self))
 
     def load_sprites(self):
         assets_folder = "assets"
