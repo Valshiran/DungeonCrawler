@@ -41,7 +41,7 @@ class DungeonEngine:
             "shield": "none"
         }
 
-        self.inventory = ["minor_potion", "minor_potion", "spiked_club"]
+        self.inventory = ["minor_potion", "minor_potion", "spiked_club"] # starting items
         
      
         

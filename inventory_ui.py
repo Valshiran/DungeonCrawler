@@ -95,7 +95,7 @@ class InventoryWindow:
             
         item_index = selected_index[0]
         new_item_id = self.game.inventory[item_index]
-        item_data = item_database.ITEMS.get(new_item_id)
+        item_data = self.get_item_data(new_item_id)
         
         if not item_data:
             return
